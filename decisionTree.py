@@ -20,13 +20,13 @@ def preprocess(data):
 
 
 def loadData():
-    data = pd.read_csv('adult.data', names=columns)
+    data = pd.read_csv('originalData/adult.data', names=columns)
     print(data.head())
     return data
 
 
 def loadTestData():
-    test = pd.read_csv('desktop/data mining project/adult.test', names=columns)
+    test = pd.read_csv('originalData/adult.test', names=columns)
     test = test.drop([0], axis=0)
 
 
