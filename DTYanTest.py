@@ -165,11 +165,11 @@ class DecisionTreeCls():
             for child in tempTreeHead.children:
                 treeFeature = tempTreeHead.feature
                 treeFeatureIndex = features.index(treeFeature)
-                colValues = getColValues(X_test, treeFeatureIndex)
                 # whether the feature value of X_test equals to the feature value of node
-                if colValues[0] == child.featureValue:
+                if X_test[treeFeatureIndex] == child.featureValue:
                     tempTreeHead = child
                     break
+        print("test")
         return tempTreeHead.label
 
 
@@ -193,9 +193,10 @@ if __name__ == '__main__':
     dt.fit()
 
     X_test, y_test = loadData('originalData/adult.test')
-    y_pre = dt.predict(X_test)
-    print(y_pre)
-    print("test")
+    yPreList = []
+    for test in X_test:
+        yPreList.append(dt.predict(test))
+    print(yPreList)
 
 
 
