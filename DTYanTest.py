@@ -4,10 +4,6 @@ from utils import *
 features = ['age', 'workclass', 'fnlwgt', 'education', 'education-num', 'marital-status', 'occupation',
            'relationship', 'race', 'sex', 'capital-gain', 'capital-loss', 'hours-per-week', 'native-country']
 
-featuresTraceDict = {}
-for fea in features:
-    featuresTraceDict[fea] = 0
-
 
 class CriteriaCls():
     def __init__(self, X_train, y_train):
@@ -47,12 +43,7 @@ class CriteriaCls():
         featureIndex = features.index(feature)
         colData = getColValues(self.X_train, featureIndex)
         XProbMap = self.getProbOfList(colData)
-        rowIdxMap = {}
-        for idx, col in enumerate(colData):
-            if col in rowIdxMap.keys():
-                rowIdxMap[col].append(idx)
-            else:
-                rowIdxMap[col] = [idx]
+        rowIdxMap = getRowMap(colData)
         giniValueList = []
         for key in XProbMap.keys():
             rowIdxLIst = rowIdxMap[key]
@@ -60,8 +51,8 @@ class CriteriaCls():
             for row in rowIdxLIst:
                 yValueList.append(self.y_train[row])
             giniValueList.append(self.giniValue(yValueList))
-
-        pass
+        avgGini = getMulOfTwoList(giniValueList, XProbMap.values())
+        return avgGini
 
     def InfoGain(self, feature):
         originEnt = self.entropy(self.y_train)
@@ -70,12 +61,7 @@ class CriteriaCls():
         featureIndex = features.index(feature)
         colData = getColValues(self.X_train, featureIndex)
         XProbMap = self.getProbOfList(colData)
-        rowIdxMap = {}
-        for idx, col in enumerate(colData):
-            if col in rowIdxMap.keys():
-                rowIdxMap[col].append(idx)
-            else:
-                rowIdxMap[col] = [idx]
+        rowIdxMap = getRowMap(colData)
         entOfFeatureList = []
         for key in XProbMap.keys():
             rowIdxLIst = rowIdxMap[key]
@@ -90,8 +76,9 @@ class CriteriaCls():
 
 class Node():
 
-    def __init__(self, children, X, y, feature, label):
+    def __init__(self, children, featureValue, X, y, feature, label):
         self.children = children
+        self.featureValue = featureValue
         self.X = X
         self.y = y
         self.feature = feature
@@ -103,6 +90,10 @@ class DecisionTreeCls():
         self.X = X
         self.y = y
         self.criterion = criterion
+        self.treeHead = None
+        self.featuresTraceDict = {}
+        for fea in features:
+            self.featuresTraceDict[fea] = 0
 
     def bestSpliter(self, X, y, featuresTraceDict):
         if self.criterion == "entropy":
@@ -139,10 +130,10 @@ class DecisionTreeCls():
                 return False
         return True
 
-    def depthFirstTree(self, X, y, usedFeaNum, featuresTraceDict):
+    def depthFirstTree(self, X, y, usedFeaNum, featuresTraceDict, featureValue):
         if len(features) - usedFeaNum == 1 or self.checkLabels(y):
             label = y[0]
-            return Node(None, X, y, None, label)
+            return Node(None, featureValue, X, y, None, label)
 
         else:
             optiFea = self.bestSpliter(X, y, featuresTraceDict)
@@ -151,12 +142,7 @@ class DecisionTreeCls():
             colData = getColValues(X, optiFeaIndex)
             colUniData = set(colData)
 
-            rowIdxMap = {}
-            for idx, col in enumerate(colData):
-                if col in rowIdxMap.keys():
-                    rowIdxMap[col].append(idx)
-                else:
-                    rowIdxMap[col] = [idx]
+            rowIdxMap = getRowMap(colData)
 
             # generate children of one node in tree
             children = []
@@ -167,26 +153,49 @@ class DecisionTreeCls():
                 for row in rowList:
                     XChildren.append(X[row])
                     yChildren.append(y[row])
-                children.append(self.depthFirstTree(XChildren, yChildren, usedFeaNum, featuresTraceDict))
-            return Node(children, None, None, optiFea, None)
+                children.append(self.depthFirstTree(XChildren, yChildren, usedFeaNum, featuresTraceDict, value))
+            return Node(children, featureValue, None, None, optiFea, None)
+
+    def fit(self):
+        self.treeHead = self.depthFirstTree(self.X, self.y, usedFeaNum=0, featuresTraceDict=self.featuresTraceDict, featureValue=None)
+
+    def predict(self, X_test):
+        tempTreeHead = self.treeHead
+        while tempTreeHead.children:
+            for child in tempTreeHead.children:
+                treeFeature = tempTreeHead.feature
+                treeFeatureIndex = features.index(treeFeature)
+                colValues = getColValues(X_test, treeFeatureIndex)
+                # whether the feature value of X_test equals to the feature value of node
+                if colValues[0] == child.featureValue:
+                    tempTreeHead = child
+                    break
+        return tempTreeHead.label
 
 
-def loadTrainData():
-    data = []
-    with open('originalData/adult.data') as file:
+def loadData(path):
+    X = []
+    y = []
+    with open(path) as file:
         for line in file:
             line = line.strip()
             if line == '':
                 continue
             lineList = line.split(',')
-            data.append(lineList)
-    return data
+            X.append(lineList[:-1])
+            y.append(lineList[-1])
+    return X, y
 
 
 if __name__ == '__main__':
-    dataTrain = loadTrainData()
-    X_train = dataTrain[:-1]
-    y_train = dataTrain[-1]
+    X_train, y_train = loadData('originalData/adult.data')
+    dt = DecisionTreeCls(X_train, y_train, 'entropy')
+    dt.fit()
+
+    X_test, y_test = loadData('originalData/adult.test')
+    y_pre = dt.predict(X_test)
+    print(y_pre)
+    print("test")
 
 
 
