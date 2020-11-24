@@ -4,11 +4,14 @@ def getColValues(matrix, col):
         data.append(l[col])
     return data
 
+
 def getValuesPairs(matrix, col, labels):
-    data = []
+    dataPairs = []
+    data = set()
     for idx, l in enumerate(matrix):
-        data.append((float(l[col]), labels[idx]))
-    return data
+        dataPairs.append((float(l[col]), labels[idx]))
+        data.add(float(l[col]))
+    return dataPairs, sorted(list(data))
 
 
 def getMulOfTwoList(list1, list2):
@@ -27,12 +30,13 @@ def getRowMap(colDataList):
 
     return rowIdxMap
 
-def getSplitList(feature, dataPairsSort, continuousFeaList):
+
+def getSplitList(feature, uniFeaValList, continuousFeaList):
     splitSet = set()
     # get all the split points
-    dataLength = len(dataPairsSort)
+    dataLength = len(uniFeaValList)
     for i in range(dataLength - 1):
-        point = (dataPairsSort[i][0] + dataPairsSort[i + 1][0]) / 2
+        point = (uniFeaValList[i] + uniFeaValList[i + 1]) / 2
         if (feature, point) in continuousFeaList:
             continue
         splitSet.add(point)

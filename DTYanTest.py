@@ -57,12 +57,14 @@ class CriteriaCls():
 
     def continuousGini(self, feature, continuousFeaList):
         featureIndex = features.index(feature)
-        dataPairs = getValuesPairs(self.X_train, featureIndex, self.y_train)
+        if feature == "fnlwgt":
+            print("test")
+        dataPairs, uniFeaValList = getValuesPairs(self.X_train, featureIndex, self.y_train)
         dataPairsSort = sorted(dataPairs, key=lambda x: x[0])
 
         # get the best split point among all points of feature
         # splitList has an increasing order which can help reduce time complexity
-        splitList = getSplitList(feature, dataPairsSort, continuousFeaList)
+        splitList = getSplitList(feature, uniFeaValList, continuousFeaList)
         bestSplit, SplittedGini = self.getBestGiniPoint(dataPairsSort, splitList)
         return bestSplit, SplittedGini
 
@@ -72,16 +74,14 @@ class CriteriaCls():
         minGini = 0
         bestSplit = 0
         for idx, split in enumerate(splitList):
-            if idx == 0:
-                dataIdx = self.getSortedDataIdx(dataPairsSort, split, dataIdx)
-            else:
-                dataIdx = self.getSortedDataIdx(dataPairsSort, split, dataIdx)
+            dataIdx = self.getSortedDataIdx(dataPairsSort, split, dataIdx)
             gini = dataIdx / length * self.giniValue(self.y_train[:dataIdx]) + (1 - dataIdx / length) * self.giniValue(self.y_train[dataIdx:])
 
             if idx == 0:
                 minGini = gini
                 bestSplit = split
             if gini < minGini:
+                minGini = gini
                 bestSplit = split
         return bestSplit, minGini
 
