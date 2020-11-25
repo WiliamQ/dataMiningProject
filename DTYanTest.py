@@ -4,7 +4,8 @@ from utils import *
 features = ['age', 'workclass', 'fnlwgt', 'education', 'education-num', 'marital-status', 'occupation',
            'relationship', 'race', 'sex', 'capital-gain', 'capital-loss', 'hours-per-week']
 
-continuousFeatures = ['age', 'fnlwgt', 'capital-gain', 'capital-loss', 'hours-per-week']
+continuousFeatures = ['age', 'fnlwgt', 'capital-gain', 'education-num','capital-loss', 'hours-per-week']
+CONTI_SPLIT_GROUP_NUMS = 10
 
 
 class CriteriaCls():
@@ -55,18 +56,31 @@ class CriteriaCls():
         avgGini = getMulOfTwoList(giniValueList, XProbMap.values())
         return avgGini
 
-    def continuousGini(self, feature, continuousFeaList):
+    def continuousGini(self, feature, intervalNums):
         featureIndex = features.index(feature)
-        if feature == "fnlwgt":
-            print("test")
         dataPairs, uniFeaValList = getValuesPairs(self.X_train, featureIndex, self.y_train)
         dataPairsSort = sorted(dataPairs, key=lambda x: x[0])
 
         # get the best split point among all points of feature
         # splitList has an increasing order which can help reduce time complexity
-        splitList = getSplitList(feature, uniFeaValList, continuousFeaList)
-        bestSplit, SplittedGini = self.getBestGiniPoint(dataPairsSort, splitList)
-        return bestSplit, SplittedGini
+        splitList = getSplitList(uniFeaValList, intervalNums)
+        avgGini = self.countContiGini(dataPairsSort, splitList)
+        return avgGini
+
+    def countContiGini(self, dataPairsSort, splitList):
+        length = len(dataPairsSort)
+        startIdx = 0
+        avgGini = 0.0
+        for i in range(len(splitList) - 1):
+            minInter = splitList[i]
+            maxInter = splitList[i + 1]
+            endIdx, valueCollect = self.getSortedDataIdx(dataPairsSort, maxInter, startIdx)
+            tempGini = 1.0
+            for key, value in valueCollect.items():
+                tempGini -= pow(value / (endIdx - startIdx), 2)
+            avgGini += (endIdx - startIdx) / length * tempGini
+            startIdx = endIdx
+        return avgGini
 
     def getBestGiniPoint(self, dataPairsSort, splitList):
         length = len(dataPairsSort)
@@ -104,7 +118,7 @@ class CriteriaCls():
 
         return originEnt - entOfFeature
 
-    def continuousInfoGain(self, feature, continuousFeaList):
+    def continuousInfoGain(self, feature):
         originEnt = self.entropy(self.y_train)
 
         featureIndex = features.index(feature)
@@ -116,8 +130,6 @@ class CriteriaCls():
         dataLength = len(self.y_train)
         for i in range(dataLength - 1):
             point = (dataPairsSort[i][0] + dataPairsSort[i + 1][0]) / 2
-            if (feature, point) in continuousFeaList:
-                continue
             splitSet.add(point)
         # get the best split point among all points of feature
         # splitList has an increasing order which can help reduce time complexity
@@ -146,21 +158,29 @@ class CriteriaCls():
         return bestSplit, minEntro
 
     def getSortedDataIdx(self, dataPairsSort, splitPoint, startIdx):
+        valueCollect = {}
         for idx, value in enumerate(dataPairsSort[startIdx:]):
             if splitPoint < value[0]:
-                return idx + startIdx
+                return idx + startIdx, valueCollect
+            else:
+                if value[1] in valueCollect.keys():
+                    valueCollect[value[1]] += 1
+                else:
+                    valueCollect[value[1]] = 1
+        return len(dataPairsSort), valueCollect
 
 
 class Node():
 
-    def __init__(self, children, featureValue, relation, X, y, feature, label):
+    def __init__(self, children, feature, featureValue, X, y, label, upper, lower):
         self.children = children
+        self.feature = feature
         self.featureValue = featureValue
-        self.relation = relation
         self.X = X
         self.y = y
-        self.feature = feature
         self.label = label
+        self.upper = upper
+        self.lower = lower
 
 
 class DecisionTreeCls():
@@ -173,9 +193,9 @@ class DecisionTreeCls():
         for fea in features:
             self.discreteFeaTraceDict[fea] = 0
 
-    def bestSpliter(self, X, y, discreteFeaTraceDict, continuousFeaList):
+    def bestSpliter(self, X, y, discreteFeaTraceDict):
         criTraceList = []
-        feature2point = {}
+        # feature2point = {}
         criterioObj = CriteriaCls(X, y)
         optiIdx = 0
         if self.criterion == "entropy":
@@ -185,8 +205,8 @@ class DecisionTreeCls():
                     criTraceList.append(entroGain)
                 elif feature in continuousFeatures:
                     # for a continuous feature, a specified splitValue should be found out
-                    bestSplitPoint, entroGain = criterioObj.continuousInfoGain(feature, continuousFeaList)
-                    feature2point[feature] = bestSplitPoint
+                    bestSplitPoint, entroGain = criterioObj.continuousInfoGain(feature)
+                    # feature2point[feature] = bestSplitPoint
                     criTraceList.append(entroGain)
                 else:
                     continue
@@ -197,21 +217,16 @@ class DecisionTreeCls():
                     gini = criterioObj.discreteGini(feature)
                     criTraceList.append(gini)
                 elif feature in continuousFeatures:
-                    bestSplitPoint, gini = criterioObj.continuousGini(feature, continuousFeaList)
-                    feature2point[feature] = bestSplitPoint
+                    gini = criterioObj.continuousGini(feature, CONTI_SPLIT_GROUP_NUMS)
                     criTraceList.append(gini)
                 else:
                     continue
             optiIdx = criTraceList.index(min(criTraceList))
 
-        optiFea = features[optiIdx]
         # update the trace Dict of features
-        if optiFea in continuousFeatures:
-            continuousFeaList.append((optiFea, feature2point[optiFea]))
-            return optiFea, feature2point[optiFea], discreteFeaTraceDict, continuousFeaList
-        else:
-            discreteFeaTraceDict[optiFea] = 1
-            return optiFea, None, discreteFeaTraceDict, continuousFeaList
+        if features[optiIdx] not in continuousFeatures:
+            discreteFeaTraceDict[features[optiIdx]] = 1
+        return optiIdx, discreteFeaTraceDict
 
     def checkLeftFeatures(self, featuresTraceDict):
         count = 0
@@ -229,20 +244,16 @@ class DecisionTreeCls():
                 return False
         return True
 
-    ## discreteFeaTraceDict: trace whether a discrete feature has been used, if the featureVallue belongs to a continuous feature, it should be None
-    ## featureValue: the feature value of one feature that the node represents
-    ## relation: if featureValue is contimuous, it represents the relation: <= (smaller), or > (larger) else None
-    ## continuousFeaList: tuples mark continuous feature and feature has been used (feature, featureValue)
-    def depthFirstTree(self, X, y, discreteFeaTraceDict, featureValue, relation, continuousFeaList):
+    def depthFirstTree(self, X, y, discreteFeaTraceDict, featureValue, upper, lower):
         # if all labels in y are the same, then stop
-        if self.checkLabels(y):
+        if self.checkLabels(y) or len(y) == 1:
             label = y[0]
-            # children, featureValue, relation, X, y, feature, label
-            return Node(None, featureValue, relation, X, y, None, label)
+            # children, feature, featureValue, X, y, label, upper, lower
+            return Node(children=None, feature=None, featureValue=featureValue, X=X, y=y, label=label, upper=upper, lower=lower)
         else:
-            optiFea, splitPoint, discreteFeaTraceDict, continuousFeaList = self.bestSpliter(X, y, discreteFeaTraceDict, continuousFeaList)
-            optiFeaIndex = features.index(optiFea)
-            featureData = getColValues(X, optiFeaIndex)
+            optiIdx, discreteFeaTraceDict = self.bestSpliter(X, y, discreteFeaTraceDict)
+            optiFea = features[optiIdx]
+            featureData = getColValues(X, optiIdx)
             children = []
 
             if optiFea not in continuousFeatures:
@@ -256,23 +267,23 @@ class DecisionTreeCls():
                     for row in rowList:
                         XChildren.append(X[row])
                         yChildren.append(y[row])
-                    children.append(self.depthFirstTree(XChildren, yChildren, discreteFeaTraceDict, value, None, continuousFeaList))
+                    children.append(self.depthFirstTree(XChildren, yChildren, discreteFeaTraceDict, value, None, None))
             else:
-                XSmallerPart = []
-                XLargerPart = []
-                ySmallerPart = []
-                yLargerPart = []
-                for row, value in enumerate(featureData):
-                    if value <= splitPoint:
-                        XSmallerPart.append(X[row])
-                        ySmallerPart.append(y[row])
-                    else:
-                        XLargerPart.append(X[row])
-                        yLargerPart.append(y[row])
-                children.append(self.depthFirstTree(XSmallerPart, ySmallerPart, discreteFeaTraceDict, splitPoint, "smaller", continuousFeaList))
-                children.append(self.depthFirstTree(XLargerPart, yLargerPart, discreteFeaTraceDict, splitPoint, "larger", continuousFeaList))
+                uniFeaData = list(set(featureData))
+                minVal = min(uniFeaData)
+                maxVal = max(uniFeaData) + 1
+                interval = (maxVal - minVal) / CONTI_SPLIT_GROUP_NUMS
 
-            return Node(children, featureValue, relation, None, None, optiFea, None)
+                group2row = getGroup2Row(featureData, minVal, interval)
+                for key, value in group2row.items():
+                    tempLower = minVal + interval * key
+                    tempUpper = minVal + interval * (key + 1)
+                    if len(value) > 0:
+                        Xdata = getValueByRow(X, value)
+                        ydata = getValueByRow(y, value)
+                        children.append(self.depthFirstTree(Xdata, ydata, discreteFeaTraceDict, None, tempUpper, tempLower))
+            # children, feature, featureValue, X, y, label, upper, lower
+            return Node(children=children, feature=optiFea, featureValue=featureValue, X=None, y=None, label=None, upper=upper, lower=lower)
 
     def fit(self):
         self.treeHead = self.depthFirstTree(self.X, self.y, self.discreteFeaTraceDict, None, None, [])
@@ -289,11 +300,7 @@ class DecisionTreeCls():
                         tempTreeHead = child
                         break
                 else:
-                    if float(X_test[treeFeatureIndex]) <= child.featureValue and child.relation == "smaller":
-                        tempTreeHead = child
-                        break
-                    if float(X_test[treeFeatureIndex]) > child.featureValue and child.relation == "larger":
-                        tempTreeHead = child
+
                         break
         return tempTreeHead.label
 
@@ -309,6 +316,9 @@ def loadData(path):
             lineList = line.split(',')
             if '?' in lineList:
                 continue
+            for feature in continuousFeatures:
+                idx = features.index(feature)
+                lineList[idx] = float(lineList[idx])
             X.append(lineList[:-2])
             y.append(lineList[-1])
     return X, y

@@ -9,8 +9,8 @@ def getValuesPairs(matrix, col, labels):
     dataPairs = []
     data = set()
     for idx, l in enumerate(matrix):
-        dataPairs.append((float(l[col]), labels[idx]))
-        data.add(float(l[col]))
+        dataPairs.append((l[col], labels[idx]))
+        data.add(l[col])
     return dataPairs, sorted(list(data))
 
 
@@ -31,14 +31,31 @@ def getRowMap(colDataList):
     return rowIdxMap
 
 
-def getSplitList(feature, uniFeaValList, continuousFeaList):
-    splitSet = set()
-    # get all the split points
-    dataLength = len(uniFeaValList)
-    for i in range(dataLength - 1):
-        point = (uniFeaValList[i] + uniFeaValList[i + 1]) / 2
-        if (feature, point) in continuousFeaList:
-            continue
-        splitSet.add(point)
+def getGroup2Row(featureData, minVal, interval):
+    group2row = {}
+    for idx, value in enumerate(featureData):
+        groupIdx = int((value - minVal) / interval)
+        if groupIdx in group2row.keys():
+            group2row[groupIdx].append(idx)
+        else:
+            group2row[groupIdx] = [idx]
+    return group2row
 
-    return sorted(list(splitSet))
+
+def getSplitList(uniFeaValList, intervalNums):
+    minVal = min(uniFeaValList)
+    maxVal = max(uniFeaValList) + 1
+    interval = (maxVal - minVal) / intervalNums
+    splits = [minVal]
+    start = minVal
+    for i in range(intervalNums - 1):
+        start += interval
+        splits.append(start)
+    splits.append(maxVal)
+    return splits
+
+def getValueByRow(dataLIst, rowList):
+    data = []
+    for row in rowList:
+        data.append(dataLIst[row])
+    return data
