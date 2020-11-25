@@ -54,8 +54,22 @@ def getSplitList(uniFeaValList, intervalNums):
     splits.append(maxVal)
     return splits
 
+
 def getValueByRow(dataLIst, rowList):
     data = []
     for row in rowList:
         data.append(dataLIst[row])
     return data
+
+
+def getProbOfList(dataList):
+    staMap = {}
+    for value in dataList:
+        if value in staMap.keys():
+            staMap[value] += 1
+        else:
+            staMap[value] = 1
+    listLength = len(dataList)
+    for key, value in staMap.items():
+        staMap[key] = staMap[key] / listLength
+    return staMap

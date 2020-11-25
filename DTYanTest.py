@@ -6,6 +6,7 @@ features = ['age', 'workclass', 'fnlwgt', 'education', 'education-num', 'marital
 
 continuousFeatures = ['age', 'fnlwgt', 'capital-gain', 'education-num','capital-loss', 'hours-per-week']
 CONTI_SPLIT_GROUP_NUMS = 10
+MAX_DEPTH = 20
 
 
 class CriteriaCls():
@@ -13,45 +14,30 @@ class CriteriaCls():
         self.X_train = X_train
         self.y_train = y_train
 
-    @staticmethod
-    def getProbOfList(dataList):
-        staMap = {}
-        for value in dataList:
-            if value in staMap.keys():
-                staMap[value] += 1
-            else:
-                staMap[value] = 1
-        listLength = len(dataList)
-        for key, value in staMap.items():
-            staMap[key] = staMap[key] / listLength
-        return staMap
 
     def entropy(self, data):
-        probMap = self.getProbOfList(data)
+        probMap = getProbOfList(data)
         ent = 0
         for key, value in probMap.items():
             ent = ent + (-1) * math.log2(value) * value
         return ent
 
     def giniValue(self, data):
-        dataProb = self.getProbOfList(data)
-        length = len(data)
+        dataProb = getProbOfList(data)
         giniIndex = 1.0
         for key, value in dataProb.items():
-            giniIndex -= pow(value / length, 2)
+            giniIndex -= pow(value, 2)
         return giniIndex
 
     def discreteGini(self, feature):
         featureIndex = features.index(feature)
         featureData = getColValues(self.X_train, featureIndex)
-        XProbMap = self.getProbOfList(featureData)
+        XProbMap = getProbOfList(featureData)
         rowIdxMap = getRowMap(featureData)
         giniValueList = []
         for key in XProbMap.keys():
             rowIdxLIst = rowIdxMap[key]
-            yValueList = []
-            for row in rowIdxLIst:
-                yValueList.append(self.y_train[row])
+            yValueList = getValueByRow(self.y_train, rowIdxLIst)
             giniValueList.append(self.giniValue(yValueList))
         avgGini = getMulOfTwoList(giniValueList, XProbMap.values())
         return avgGini
@@ -105,7 +91,7 @@ class CriteriaCls():
         # get the distribution of one col in X
         featureIndex = features.index(feature)
         colData = getColValues(self.X_train, featureIndex)
-        XProbMap = self.getProbOfList(colData)
+        XProbMap = getProbOfList(colData)
         rowIdxMap = getRowMap(colData)
         entOfFeatureList = []
         for key in XProbMap.keys():
@@ -244,32 +230,32 @@ class DecisionTreeCls():
                 return False
         return True
 
-    def depthFirstTree(self, X, y, discreteFeaTraceDict, featureValue, upper, lower):
+    def depthFirstTree(self, layer, X, y, discreteFeaTraceDict, featureValue, upper, lower):
         # if all labels in y are the same, then stop
         if self.checkLabels(y) or len(y) == 1:
             label = y[0]
             # children, feature, featureValue, X, y, label, upper, lower
             return Node(children=None, feature=None, featureValue=featureValue, X=X, y=y, label=label, upper=upper, lower=lower)
+        elif layer > MAX_DEPTH:
+            yProb = getProbOfList(y)
+            label = max(yProb, key=yProb.get)
+            return Node(children=None, feature=None, featureValue=featureValue, X=X, y=y, label=label, upper=upper, lower=lower)
         else:
             optiIdx, discreteFeaTraceDict = self.bestSpliter(X, y, discreteFeaTraceDict)
             optiFea = features[optiIdx]
             featureData = getColValues(X, optiIdx)
+            uniFeaData = set(featureData)
             children = []
-
             if optiFea not in continuousFeatures:
-                featureUniData = set(featureData)
                 rowIdxMap = getRowMap(featureData)
                 # generate children of one node in tree
-                for value in featureUniData:
+                for value in uniFeaData:
                     rowList = rowIdxMap[value]
-                    XChildren = []
-                    yChildren = []
-                    for row in rowList:
-                        XChildren.append(X[row])
-                        yChildren.append(y[row])
-                    children.append(self.depthFirstTree(XChildren, yChildren, discreteFeaTraceDict, value, None, None))
+                    if len(rowList) > 0:
+                        XChildren = getValueByRow(X, rowList)
+                        yChildren = getValueByRow(y, rowList)
+                        children.append(self.depthFirstTree(layer + 1, XChildren, yChildren, discreteFeaTraceDict, value, None, None))
             else:
-                uniFeaData = list(set(featureData))
                 minVal = min(uniFeaData)
                 maxVal = max(uniFeaData) + 1
                 interval = (maxVal - minVal) / CONTI_SPLIT_GROUP_NUMS
@@ -281,12 +267,12 @@ class DecisionTreeCls():
                     if len(value) > 0:
                         Xdata = getValueByRow(X, value)
                         ydata = getValueByRow(y, value)
-                        children.append(self.depthFirstTree(Xdata, ydata, discreteFeaTraceDict, None, tempUpper, tempLower))
+                        children.append(self.depthFirstTree(layer + 1, Xdata, ydata, discreteFeaTraceDict, None, tempUpper, tempLower))
             # children, feature, featureValue, X, y, label, upper, lower
             return Node(children=children, feature=optiFea, featureValue=featureValue, X=None, y=None, label=None, upper=upper, lower=lower)
 
     def fit(self):
-        self.treeHead = self.depthFirstTree(self.X, self.y, self.discreteFeaTraceDict, None, None, [])
+        self.treeHead = self.depthFirstTree(0, self.X, self.y, self.discreteFeaTraceDict, None, None, [])
 
     def predict(self, X_test):
         tempTreeHead = self.treeHead
@@ -300,7 +286,8 @@ class DecisionTreeCls():
                         tempTreeHead = child
                         break
                 else:
-
+                    if child.lower <= X_test[treeFeatureIndex] < child.upper:
+                        tempTreeHead = child
                         break
         return tempTreeHead.label
 
@@ -314,6 +301,7 @@ def loadData(path):
             if line == '':
                 continue
             lineList = line.split(',')
+            lineList = [val.strip() for val in lineList]
             if '?' in lineList:
                 continue
             for feature in continuousFeatures:
@@ -325,14 +313,20 @@ def loadData(path):
 
 
 if __name__ == '__main__':
+    from time import *
     X_train, y_train = loadData('originalData/adult.data')
     dt = DecisionTreeCls(X_train, y_train, 'gini')
     dt.fit()
 
     X_test, y_test = loadData('originalData/adult.test')
     yPreList = []
-    for test in X_test:
+    startTime = time()
+    for idx, test in enumerate(X_test):
+        if idx == 82:
+            print(idx)
         yPreList.append(dt.predict(test))
+    endTime = time()
+    print("runtime: ", endTime - startTime)
     print(yPreList)
 
 
