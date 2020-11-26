@@ -6,7 +6,7 @@ features = ['age', 'workclass', 'fnlwgt', 'education', 'education-num', 'marital
 
 continuousFeatures = ['age', 'fnlwgt', 'capital-gain', 'education-num','capital-loss', 'hours-per-week']
 CONTI_SPLIT_GROUP_NUMS = 10
-MAX_DEPTH = 20
+MAX_DEPTH = 11
 
 
 class CriteriaCls():
